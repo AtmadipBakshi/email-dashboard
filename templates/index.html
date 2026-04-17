@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Intelligence Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            background: #f4f6f9;
+            transition: 0.3s;
+        }
+
+        body.dark {
+            background: #121212;
+            color: white;
+        }
+
+        h1 {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            height: 100vh;
+        }
+
+        .sidebar {
+            background: white;
+            padding: 15px;
+            border-right: 1px solid #ddd;
+        }
+
+        body.dark .sidebar {
+            background: #1e1e1e;
+        }
+
+        .folder {
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .folder:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .active {
+            background: #007bff;
+            color: white;
+        }
+
+        .main {
+            padding: 10px;
+        }
+
+        .topbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input {
+            padding: 8px;
+            width: 250px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body.dark .card {
+            background: #1e1e1e;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background: rgba(0,0,0,0.05);
+            cursor: pointer;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .Primary { background: #d1ecf1; }
+        .Social { background: #d4edda; }
+        .Promotions { background: #fff3cd; }
+        .Updates { background: #f8d7da; }
+        .Others { background: #e2e3e5; }
+
+        .dot {
+            height: 8px;
+            width: 8px;
+            background: red;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        #kpi {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>📩 Email Intelligence Dashboard</h1>
+
+<div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h3>Folders</h3>
+
+        <div class="folder active" onclick="setFilter('ALL')">📥 Inbox</div>
+        <div class="folder" onclick="setFilter('Primary')">📌 Primary</div>
+        <div class="folder" onclick="setFilter('Social')">👥 Social</div>
+        <div class="folder" onclick="setFilter('Promotions')">🏷 Promotions</div>
+        <div class="folder" onclick="setFilter('Updates')">🔔 Updates</div>
+        <div class="folder" onclick="setFilter('Others')">📂 Others</div>
+
+        <hr>
+
+        <button onclick="loadEmails()">🔄 Refresh</button>
+        <button onclick="toggleDark()">🌙 Mode</button>
+        <button onclick="exportCSV()">⬇ Export</button>
+        <button onclick="toggleUnread()">🔴 Unread Only</button>
+
+        <hr>
+        <div id="banner" style="text-align:center; font-weight:bold;"></div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <div class="topbar">
+            <input id="search" placeholder="Search emails..." onkeyup="filterEmails()" />
+        </div>
+
+        <!-- KPI -->
+        <div id="kpi"></div>
+
+        <div class="container">
+
+            <!-- EMAIL TABLE -->
+            <div class="card">
+                <h3>Inbox</h3>
+                <table id="emailTable">
+                    <tr>
+                        <th>Subject</th>
+                        <th>Sender</th>
+                        <th>Category</th>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- ANALYTICS -->
+            <div class="card">
+                <h3>Analytics</h3>
+                <canvas id="chart"></canvas>
+
+                <hr>
+
+                <h3>📅 Timeline</h3>
+                <div id="timeStats"></div>
+
+                <hr>
+
+                <h3>📤 Top Senders</h3>
+                <div id="topSenders"></div>
+
+                <hr>
+
+                <h3>🧠 Summary</h3>
+                <div id="summaryText"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+let allEmails = [];
+let chart;
+let currentFilter = "ALL";
+let showUnreadOnly = false;
+
+/* ---------- CATEGORY ---------- */
+
+function categorize(subject, sender) {
+    subject = subject.toLowerCase();
+    sender = sender.toLowerCase();
+
+    if (sender.includes("google") || sender.includes("github")) return "Updates";
+    if (subject.includes("sale") || subject.includes("offer")) return "Promotions";
+    if (sender.includes("facebook") || sender.includes("instagram")) return "Social";
+    if (subject.includes("invoice") || subject.includes("payment")) return "Primary";
+
+    return "Others";
+}
+
+/* ---------- UNREAD ---------- */
+
+function isUnread(email) {
+    const s = email.subject.toLowerCase();
+    return !s.includes("re:") && !s.includes("reply");
+}
+
+/* ---------- LOAD ---------- */
+
+async function loadEmails() {
+    const res = await fetch("/emails");
+    const data = await res.json();
+
+    allEmails = data;
+    render(data);
+}
+
+/* ---------- RENDER ---------- */
+
+function render(data) {
+
+    const table = document.getElementById("emailTable");
+
+    table.innerHTML = `
+        <tr>
+            <th>Subject</th>
+            <th>Sender</th>
+            <th>Category</th>
+        </tr>
+    `;
+
+    let counts = { Primary:0, Social:0, Promotions:0, Updates:0, Others:0 };
+    let unread = 0;
+
+    data.forEach(email => {
+
+        const cat = categorize(email.subject, email.sender);
+        counts[cat]++;
+
+        if (isUnread(email)) unread++;
+
+        const row = table.insertRow();
+        row.onclick = () => alert(email.subject + "\n\n" + email.sender);
+
+        row.insertCell(0).innerHTML = `<span class="dot"></span>` + email.subject;
+        row.insertCell(1).innerText = email.sender;
+        row.insertCell(2).innerHTML = `<span class="badge ${cat}">${cat}</span>`;
+    });
+
+    drawChart(counts);
+    analyzeTimeAndSenders(data);
+    updateKPI(data.length, unread, counts);
+    generateSummary(data);
+}
+
+/* ---------- CHART ---------- */
+
+function drawChart(counts) {
+    const ctx = document.getElementById("chart");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+            labels: Object.keys(counts),
+            datasets: [{ data: Object.values(counts) }]
+        }
+    });
+}
+
+/* ---------- FILTER ---------- */
+
+function filterEmails() {
+    const q = document.getElementById("search").value.toLowerCase();
+
+    let filtered = allEmails.filter(e =>
+        e.subject.toLowerCase().includes(q) ||
+        e.sender.toLowerCase().includes(q)
+    );
+
+    applyFilter(filtered);
+}
+
+function setFilter(type) {
+    currentFilter = type;
+    applyFilter(allEmails);
+}
+
+function toggleUnread() {
+    showUnreadOnly = !showUnreadOnly;
+    applyFilter(allEmails);
+}
+
+function applyFilter(data) {
+
+    let filtered = data;
+
+    if (currentFilter !== "ALL") {
+        filtered = filtered.filter(e =>
+            categorize(e.subject, e.sender) === currentFilter
+        );
+    }
+
+    if (showUnreadOnly) {
+        filtered = filtered.filter(e => isUnread(e));
+    }
+
+    render(filtered);
+}
+
+/* ---------- KPI ---------- */
+
+function updateKPI(total, unread, counts) {
+    document.getElementById("kpi").innerHTML = `
+        <div class="card">📩 Total: <b>${total}</b></div>
+        <div class="card">🔴 Unread: <b>${unread}</b></div>
+        <div class="card">📊 Primary: <b>${counts.Primary}</b></div>
+        <div class="card">📊 Promotions: <b>${counts.Promotions}</b></div>
+    `;
+}
+
+/* ---------- TIME + SENDERS ---------- */
+
+function analyzeTimeAndSenders(data) {
+
+    let senderCount = {};
+
+    data.forEach(e => {
+        senderCount[e.sender] = (senderCount[e.sender] || 0) + 1;
+    });
+
+    let top = Object.entries(senderCount)
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0,5);
+
+    document.getElementById("topSenders").innerHTML =
+        top.map(s => `<div>📧 ${s[0]} <b>(${s[1]})</b></div>`).join("");
+
+    let time = { Today:0, Yesterday:0, "2-7 Days":0, Older:0 };
+    const now = new Date();
+
+    data.forEach(e => {
+        let d = new Date(e.date);
+        let diff = Math.floor((now - d)/(1000*60*60*24));
+
+        if(diff===0) time.Today++;
+        else if(diff===1) time.Yesterday++;
+        else if(diff<=7) time["2-7 Days"]++;
+        else time.Older++;
+    });
+
+    document.getElementById("timeStats").innerHTML = `
+        <div>📍 Today: ${time.Today}</div>
+        <div>📍 Yesterday: ${time.Yesterday}</div>
+        <div>📍 2–7 Days: ${time["2-7 Days"]}</div>
+        <div>📍 Older: ${time.Older}</div>
+    `;
+}
+
+/* ---------- SUMMARY ---------- */
+
+function generateSummary(data) {
+
+    let cat = {Primary:0, Social:0, Promotions:0, Updates:0, Others:0};
+
+    data.forEach(e => cat[categorize(e.subject, e.sender)]++);
+
+    let top = Object.entries(cat).sort((a,b)=>b[1]-a[1])[0];
+
+    document.getElementById("summaryText").innerHTML = `
+         Most emails: <b>${top[0]}</b> (${top[1]})<br>
+         Total analyzed: <b>${data.length}</b>
+    `;
+
+    document.getElementById("banner").innerHTML =
+        `Dominant Category: <b>${top[0]}</b>`;
+}
+
+/* ---------- UTIL ---------- */
+
+function toggleDark() {
+    document.body.classList.toggle("dark");
+}
+
+function exportCSV() {
+    let csv = "Subject,Sender,Category\n";
+
+    allEmails.forEach(e => {
+        csv += `"${e.subject}","${e.sender}","${categorize(e.subject,e.sender)}"\n`;
+    });
+
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "emails.csv";
+    a.click();
+}
+
+/* ---------- AUTO REFRESH ---------- */
+
+setInterval(() => {
+    loadEmails();
+}, 30000);
+
+</script>
+
+</body>
+</html>
