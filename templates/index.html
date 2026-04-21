@@ -60,15 +60,6 @@
         .Updates { background: #f8d7da; }
         .Others { background: #e2e3e5; }
 
-        .dot {
-            height: 8px;
-            width: 8px;
-            background: red;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-        }
-
         #kpi { display: flex; gap: 10px; justify-content: center; margin: 10px; }
     </style>
 </head>
@@ -82,58 +73,44 @@
     <div class="sidebar">
         <h3>Folders</h3>
 
-        <div class="folder active" onclick="setFilter('ALL')">📥 Inbox</div>
-        <div class="folder" onclick="setFilter('Primary')">📌 Primary</div>
-        <div class="folder" onclick="setFilter('Social')">👥 Social</div>
-        <div class="folder" onclick="setFilter('Promotions')">🏷 Promotions</div>
-        <div class="folder" onclick="setFilter('Updates')">🔔 Updates</div>
-        <div class="folder" onclick="setFilter('Others')">📂 Others</div>
+        <div class="folder active">📥 Inbox</div>
 
         <hr>
 
         <button onclick="loadEmails()">🔄 Refresh</button>
         <button onclick="toggleDark()">🌙 Mode</button>
         <button onclick="exportCSV()">⬇ Export</button>
-        <button onclick="toggleUnread()">🔴 Unread Only</button>
 
         <hr>
-        <div id="banner"></div>
     </div>
 
     <div class="main">
 
         <div class="topbar">
-            <input id="search" placeholder="Search emails..." onkeyup="filterEmails()" />
+            <input id="search" placeholder="Search emails..." />
         </div>
-
-        <div id="kpi"></div>
 
         <div class="container">
 
             <div class="card">
                 <h3>Inbox</h3>
+
+                <!-- ✅ FIX: tbody added -->
                 <table id="emailTable">
-                    <tr>
-                        <th>Subject</th>
-                        <th>Sender</th>
-                        <th>Category</th>
-                    </tr>
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Sender</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
                 </table>
             </div>
 
             <div class="card">
                 <h3>Analytics</h3>
                 <canvas id="chart"></canvas>
-
-                <hr>
-
-                <h3>📤 Top Senders</h3>
-                <div id="topSenders"></div>
-
-                <hr>
-
-                <h3>🧠 Summary</h3>
-                <div id="summaryText"></div>
             </div>
 
         </div>
@@ -144,6 +121,7 @@
 let allEmails = [];
 let chart;
 
+// ✅ Categorization logic
 function categorize(subject, sender) {
     subject = subject.toLowerCase();
     sender = sender.toLowerCase();
@@ -156,29 +134,24 @@ function categorize(subject, sender) {
     return "Others";
 }
 
-function isUnread(email) {
-    return !email.subject.toLowerCase().includes("re:");
-}
-
-/* ✅ FIXED HERE */
+// ✅ Load emails from backend
 async function loadEmails() {
-    const res = await fetch("https://email-dashboard-backend-o3s2.onrender.com/emails");
-    const data = await res.json();
+    try {
+        const res = await fetch("https://email-dashboard-backend-o3s2.onrender.com/emails");
+        const data = await res.json();
 
-    allEmails = data;
-    render(data);
+        allEmails = data;
+        render(data);
+
+    } catch (err) {
+        console.log("Error fetching emails:", err);
+    }
 }
 
+// ✅ FIXED render function
 function render(data) {
-    const table = document.getElementById("emailTable");
-
-    table.innerHTML = `
-        <tr>
-            <th>Subject</th>
-            <th>Sender</th>
-            <th>Category</th>
-        </tr>
-    `;
+    const table = document.querySelector("#emailTable tbody");
+    table.innerHTML = "";
 
     let counts = { Primary:0, Social:0, Promotions:0, Updates:0, Others:0 };
 
@@ -187,6 +160,7 @@ function render(data) {
         counts[cat]++;
 
         const row = table.insertRow();
+
         row.insertCell(0).innerText = email.subject;
         row.insertCell(1).innerText = email.sender;
         row.insertCell(2).innerHTML = `<span class="badge ${cat}">${cat}</span>`;
@@ -195,8 +169,10 @@ function render(data) {
     drawChart(counts);
 }
 
+// ✅ Chart
 function drawChart(counts) {
     const ctx = document.getElementById("chart");
+
     if (chart) chart.destroy();
 
     chart = new Chart(ctx, {
@@ -208,10 +184,12 @@ function drawChart(counts) {
     });
 }
 
+// Dark mode
 function toggleDark() {
     document.body.classList.toggle("dark");
 }
 
+// Export CSV
 function exportCSV() {
     let csv = "Subject,Sender\n";
     allEmails.forEach(e => {
