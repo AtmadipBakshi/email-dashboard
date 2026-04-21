@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Intelligence Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { margin: 0; font-family: Arial; background: #f4f6f9; transition: 0.3s; }
+        body.dark { background: #121212; color: white; }
+        h1 { text-align: center; padding: 10px; }
+
+        .layout { display: grid; grid-template-columns: 220px 1fr; height: 100vh; }
+
+        .sidebar { background: white; padding: 15px; border-right: 1px solid #ddd; }
+        body.dark .sidebar { background: #1e1e1e; }
+
+        .folder { padding: 10px; margin: 5px 0; cursor: pointer; border-radius: 5px; }
+        .folder:hover { background: rgba(0,0,0,0.05); }
+        .active { background: #007bff; color: white; }
+
+        .main { padding: 10px; }
+
+        .topbar { display: flex; gap: 10px; margin-bottom: 10px; }
+
+        input { padding: 8px; width: 250px; }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #0056b3; }
+
+        .container { display: grid; grid-template-columns: 2fr 1fr; gap: 15px; }
+
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body.dark .card { background: #1e1e1e; }
+
+        table { width: 100%; border-collapse: collapse; }
+
+        th, td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+
+        tr:hover { background: rgba(0,0,0,0.05); cursor: pointer; }
+
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+
+        .Primary { background: #d1ecf1; }
+        .Social { background: #d4edda; }
+        .Promotions { background: #fff3cd; }
+        .Updates { background: #f8d7da; }
+        .Others { background: #e2e3e5; }
+
+        #kpi { display: flex; gap: 10px; justify-content: center; margin: 10px; }
+    </style>
+</head>
+
+<body onload="loadEmails()">
+
+<h1>📩 Email Intelligence Dashboard</h1>
+
+<div class="layout">
+
+    <div class="sidebar">
+        <h3>Folders</h3>
+
+        <div class="folder active">📥 Inbox</div>
+
+        <hr>
+
+        <button onclick="loadEmails()">🔄 Refresh</button>
+        <button onclick="toggleDark()">🌙 Mode</button>
+        <button onclick="exportCSV()">⬇ Export</button>
+
+        <hr>
+    </div>
+
+    <div class="main">
+
+        <div class="topbar">
+            <input id="search" placeholder="Search emails..." />
+        </div>
+
+        <div class="container">
+
+            <div class="card">
+                <h3>Inbox</h3>
+
+                <!-- ✅ FIX: tbody added -->
+                <table id="emailTable">
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Sender</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>Analytics</h3>
+                <canvas id="chart"></canvas>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+let allEmails = [];
+let chart;
+
+// ✅ Categorization logic
+function categorize(subject, sender) {
+    subject = subject.toLowerCase();
+    sender = sender.toLowerCase();
+
+    if (sender.includes("google") || sender.includes("github")) return "Updates";
+    if (subject.includes("sale") || subject.includes("offer")) return "Promotions";
+    if (sender.includes("facebook") || sender.includes("instagram")) return "Social";
+    if (subject.includes("invoice") || subject.includes("payment")) return "Primary";
+
+    return "Others";
+}
+
+// ✅ Load emails from backend
+async function loadEmails() {
+    try {
+        const res = await fetch("https://email-dashboard-backend-o3s2.onrender.com/emails");
+        const data = await res.json();
+
+        allEmails = data;
+        render(data);
+
+    } catch (err) {
+        console.log("Error fetching emails:", err);
+    }
+}
+
+// ✅ FIXED render function
+function render(data) {
+    const table = document.querySelector("#emailTable tbody");
+    table.innerHTML = "";
+
+    let counts = { Primary:0, Social:0, Promotions:0, Updates:0, Others:0 };
+
+    data.forEach(email => {
+        const cat = categorize(email.subject, email.sender);
+        counts[cat]++;
+
+        const row = table.insertRow();
+
+        row.insertCell(0).innerText = email.subject;
+        row.insertCell(1).innerText = email.sender;
+        row.insertCell(2).innerHTML = `<span class="badge ${cat}">${cat}</span>`;
+    });
+
+    drawChart(counts);
+}
+
+// ✅ Chart
+function drawChart(counts) {
+    const ctx = document.getElementById("chart");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+            labels: Object.keys(counts),
+            datasets: [{ data: Object.values(counts) }]
+        }
+    });
+}
+
+// Dark mode
+function toggleDark() {
+    document.body.classList.toggle("dark");
+}
+
+// Export CSV
+function exportCSV() {
+    let csv = "Subject,Sender\n";
+    allEmails.forEach(e => {
+        csv += `"${e.subject}","${e.sender}"\n`;
+    });
+
+    const blob = new Blob([csv]);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "emails.csv";
+    a.click();
+}
+</script>
+
+</body>
+</html>
